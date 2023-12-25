@@ -1,0 +1,121 @@
+#!/bin/bash
+
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+nc='\033[0m'
+
+if [[ "$1" == "site:add:reverse-proxy" ]]; then
+	read -p "Enter Domain: " domain
+	read -p "Reverse Proxy URL: " url
+	read -p "Site User: ": user
+
+	# Generate a random password
+	password=$(openssl rand -base64 15)
+
+	clpctl site:add:reverse-proxy --domainName=${domain} --reverseProxyUrl="${url}" --siteUser=${user} --siteUserPassword="${password}"
+elif [[ "$1" == "site:add:wordpress" ]]; then
+	read -p "Enter Domain: " domain
+
+	if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
+        	read -p "Template: " template
+        	read -p "Site User: " user
+
+        	# Generate a random password
+        	password=$(openssl rand -base64 15)
+
+		clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
+
+		if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
+			rm -rf  "/home/${user}/htdocs/${domain}/index.php"
+		fi
+		dbpass=$(openssl rand -base64 15)
+		clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
+
+		if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
+			su - "${user}" -c "wp core download --path=/home/${user}/htdocs/${domain}"
+			su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
+			su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=benlumia007 --admin_password=#17T793t448nx97wu --admin_email=benlumia007@gmail.com --skip-email --path=/home/${user}/htdocs/${domain}"
+		fi
+	else
+		echo -e "${yellow}${domain} exists...skipping${nc}"
+	fi
+elif [[ "$1" == "site:add:classicpress"  ]]; then
+        read -p "Enter Domain: " domain
+
+        if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
+                read -p "Template: " template
+                read -p "Site User: " user
+
+                # Generate a random password
+                password=$(openssl rand -base64 15)
+
+                clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
+
+                if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
+                        rm -rf  "/home/${user}/htdocs/${domain}/index.php"
+                fi
+                dbpass=$(openssl rand -base64 15)
+                clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
+
+                if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
+                        su - "${user}" -c "wp core download https://www.classicpress.net/latest.zip --path=/home/${user}/htdocs/${domain}"
+                        su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
+                        su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=benlumia007 --admin_password=#17T793t448nx97wu --admin_email=benlumia007@gmail.com --skip-email --path=/home/${user}/htdocs/${domain}"
+                fi
+        else
+                echo -e "${yellow}${domain} exists...skipping${nc}"
+        fi
+fi
+
+if [[ "$1" == "site:import:wordpress" ]]; then
+	echo  "Importing Site"
+elif [[ "$1" == "site:import:classicpress" ]]; then
+       read -p "Enter Domain: " domain
+
+        if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
+                read -p "Template: " template
+                read -p "Site User: " user
+
+                # Generate a random password
+                password=$(openssl rand -base64 15)
+
+                clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
+
+                if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
+                        rm -rf  "/home/${user}/htdocs/${domain}/index.php"
+                fi
+
+		if [[ "${domain}" == "luthemes.com"  ]]; then
+#			ssh root@108.166.183.180 bash test.sh
+
+                        su - "${user}" -c "wget -q -O /home/${user}/backup.tar  https://dev.luthemes.com/aesculapius/backup.tar"
+       	                su - "${user}" -c "tar -xvf /home/${user}/backup.tar > /dev/null 2>&1"
+               	        su - "${user}" -c "rm -rf htdocs"
+                       	su - "${user}" -c "mv home/${user}/htdocs /home/${user}"
+		fi
+
+
+		dbpass=$(su - "${user}" -c "wp config get DB_PASSWORD --path=/home/luthemes/htdocs/luthemes.com")
+
+		clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
+
+		dbpath="/home/${user}/home/${user}/backups/databases/${user}"
+
+		date=$(ls -1 "${dbpath}" | sort -r | head -n 1)
+
+		sql=$(ls -1t "${dbpath}/${date}"/*.sql.gz | head -n 1)
+
+		clpctl db:import --databaseName="${user}" --file="${sql}"
+
+		rm -rf "/home/${user}/backup.tar"
+		rm -rf "/home/${user}/home"
+
+#		ssh root@108.166.183.180 bash delete.sh
+
+		clpctl site:install:certificate --domainName="${domain}" --privateKey="/etc/letsencrypt/live/${domain}/privkey.pem" --certificate="/etc/letsencrypt/live/${domain}/cert.pem"
+        else
+                echo -e "${yellow}${domain} exists...skipping${nc}"
+        fi
+fi
+
