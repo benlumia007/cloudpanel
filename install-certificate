@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Prompt the user for the domain name (including subdomain, if any)
+read -p "Enter the domain name (e.g., subdomain.domain.com or domain.com): " fullDomain
+
+# Check if the fullDomain is not empty
+if [ -z "$fullDomain" ]; then
+  echo "Domain name cannot be empty."
+  exit 1
+fi
+
+# Initialize subdomain and domainName variables
+subdomain=""
+domainName="$fullDomain"
+
+# Check if it's a subdomain (contains at least one dot)
+if [[ "$fullDomain" == *.* ]]; then
+  # Use regex to split the domain name
+  if [[ "$fullDomain" =~ ^([^\.]+)\.(.+\..+)$ ]]; then
+    subdomain="${BASH_REMATCH[1]}"
+    domainName="${BASH_REMATCH[2]}"
+  fi
+fi
+
+# If subdomain is empty, it means it's a top-level domain; use fullDomain as domainName
+if [ -z "$subdomain" ]; then
+  domainName="$fullDomain"
+fi
+
+# Determine the paths to the certificate files
+certDirectory="/etc/letsencrypt/live/$domainName"
+
+# Check if the certificate directory exists
+if [ ! -d "$certDirectory" ]; then
+  echo "Certificate directory not found for domain: $fullDomain"
+  exit 1
+fi
+
+# Construct the paths to the certificate files based on the domain name
+privateKey="$certDirectory/privkey.pem"
+certificate="$certDirectory/cert.pem"
+
+# Check if the certificate files exist
+if [ ! -f "$privateKey" ] || [ ! -f "$certificate" ]; then
+  echo "Certificate files not found for domain: $fullDomain"
+  exit 1
+fi
+
+# Run the clpctl command with the determined domainName and certificate paths
+clpctl site:install:certificate --domainName="$fullDomain" --privateKey="$privateKey" --certificate="$certificate"
+
+echo "Certificate installation completed for $fullDomain"
