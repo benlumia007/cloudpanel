@@ -33,9 +33,12 @@ elif [[ "$1" == "site:add:wordpress" ]]; then
 		clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
 
 		if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
+                        read -p "Username: " username
+                        read -p "Password: " password
+                        read -p "Email: " email
 			su - "${user}" -c "wp core download --path=/home/${user}/htdocs/${domain}"
 			su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
-			su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=benlumia007 --admin_password=#17T793t448nx97wu --admin_email=benlumia007@gmail.com --skip-email --path=/home/${user}/htdocs/${domain}"
+			su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=${username} --admin_password=${password} --admin_email=${email} --skip-email --path=/home/${user}/htdocs/${domain}"
 		fi
 	else
 		echo -e "${yellow}${domain} exists...skipping${nc}"
@@ -59,9 +62,12 @@ elif [[ "$1" == "site:add:classicpress"  ]]; then
                 clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
 
                 if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
+			read -p "Username: " username
+			read -p "Password: " password
+			read -p "Email: " email
                         su - "${user}" -c "wp core download https://www.classicpress.net/latest.zip --path=/home/${user}/htdocs/${domain}"
                         su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
-                        su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=benlumia007 --admin_password=#17T793t448nx97wu --admin_email=benlumia007@gmail.com --skip-email --path=/home/${user}/htdocs/${domain}"
+                        su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=${username} --admin_password=${password} --admin_email=${email} --skip-email --path=/home/${user}/htdocs/${domain}"
                 fi
         else
                 echo -e "${yellow}${domain} exists...skipping${nc}"
