@@ -48,5 +48,3 @@ fi
 
 # Run the clpctl command with the determined domainName and certificate paths
 clpctl site:install:certificate --domainName="$fullDomain" --privateKey="$privateKey" --certificate="$certificate"
-
-echo "Certificate installation completed for $fullDomain"
