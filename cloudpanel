@@ -6,41 +6,64 @@ yellow='\033[0;33m'
 nc='\033[0m'
 
 create_site_username() {
+
+	# Start an infinite loop to prompt for input until valid input is received
 	while true; do
+
+			# Prompt the user to enter a username
 			read -p "Enter site user: " site_username
 
 			# Check if the input is empty
-			if [[ -z "$site_username" ]]; then
+			if [[ -z "${site_username}" ]]; then
+
+					# Inform the user that the input cannot be empty
 					echo "It seems like you've entered an empty space. The universe abhors a vacuum! Please enter a username."
 					echo ""
 					continue
 			fi
 
+			# Check if a directory with the username already exists
 			if [[ -d "/home/${site_username}" ]]; then
+
+				# Inform the user that the chosen username is already taken
 				echo "Oops! The username "${site_username}" is already taken in our digital universe. Let's try another cosmic name!"
-					echo ""
-	else
-		break
+				echo ""
+			else
+
+				# If the chosen username is valid (not empty and not taken), exit the loop
+				break
 			fi
 	done
 }
 
 create_site_password() {
-	site_password=$(openssl rand -base64 15)
+    # Generate a secure password using OpenSSL and assign it to the variable 'site_password'
+    # The 'rand -base64 15' command generates 15 bytes of random data, then encodes it in base64
+    site_password=$(openssl rand -base64 15)
 }
 
 create_site_domain() {
-	while true; do
-		read -p "Enter Domain: " domain
 
-		if [[ -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
-			echo "Oops! The domain you specifiy ${domain} is already taken in our digital universe. Let's try again!"
-			echo ""
-		else
-			break
-		fi
-	done
+    # Start an infinite loop to continuously prompt for a domain name
+    while true; do
+
+		# Prompt the user to enter a domain name
+        read -p "Enter Domain: " domain
+
+        # Check if a configuration file for the domain already exists in the Nginx sites-enabled directory
+        if [[ -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
+
+			# Inform the user that the domain is already taken and prompt to try again
+            echo "Oops! The domain you specified, ${domain}, is already taken in our digital universe. Let's try again!"
+            echo ""
+        else
+
+			# Break the loop if the domain name is available (no existing configuration file)
+            break
+        fi
+    done
 }
+
 
 create_generate_certificate() {
 
