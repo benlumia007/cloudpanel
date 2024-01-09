@@ -6,23 +6,23 @@ yellow='\033[0;33m'
 nc='\033[0m'
 
 create_site_username() {
-        while true; do
-                read -p "Enter site user: " site_username
+	while true; do
+			read -p "Enter site user: " site_username
 
-                # Check if the input is empty
-                if [[ -z "$site_username" ]]; then
-                        echo "It seems like you've entered an empty space. The universe abhors a vacuum! Please enter a username."
-                        echo ""
-                        continue
-                fi
+			# Check if the input is empty
+			if [[ -z "$site_username" ]]; then
+					echo "It seems like you've entered an empty space. The universe abhors a vacuum! Please enter a username."
+					echo ""
+					continue
+			fi
 
-                if [[ -d "/home/${site_username}" ]]; then
-	                echo "Oops! The username "${site_username}" is already taken in our digital universe. Let's try another cosmic name!"
-                        echo ""
-		else
-			break
-                fi
-        done
+			if [[ -d "/home/${site_username}" ]]; then
+				echo "Oops! The username "${site_username}" is already taken in our digital universe. Let's try another cosmic name!"
+					echo ""
+	else
+		break
+			fi
+	done
 }
 
 create_site_password() {
@@ -38,7 +38,7 @@ create_site_domain() {
 			echo ""
 		else
 			break
-		fi 
+		fi
 	done
 }
 
