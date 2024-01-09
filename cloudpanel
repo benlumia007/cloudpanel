@@ -5,123 +5,219 @@ green='\033[0;32m'
 yellow='\033[0;33m'
 nc='\033[0m'
 
-if [[ "$1" == "site:add:reverse-proxy" ]]; then
-	read -p "Enter Domain: " domain
-	read -p "Reverse Proxy URL: " url
-	read -p "Site User: ": user
+create_site_username() {
+        while true; do
+                read -p "Enter site user: " site_username
 
-	# Generate a random password
-	password=$(openssl rand -base64 15)
+                # Check if the input is empty
+                if [[ -z "$site_username" ]]; then
+                        echo "It seems like you've entered an empty space. The universe abhors a vacuum! Please enter a username."
+                        echo ""
+                        continue
+                fi
 
-	clpctl site:add:reverse-proxy --domainName=${domain} --reverseProxyUrl="${url}" --siteUser=${user} --siteUserPassword="${password}"
-elif [[ "$1" == "site:add:wordpress" ]]; then
-	read -p "Enter Domain: " domain
+                if [[ -d "/home/${site_username}" ]]; then
+	                echo "Oops! The username "${site_username}" is already taken in our digital universe. Let's try another cosmic name!"
+                        echo ""
+		else
+			break
+                fi
+        done
+}
+
+create_site_password() {
+	site_password=$(openssl rand -base64 15)
+}
+
+create_site_domain() {
+	while true; do
+		read -p "Enter Domain: " domain
+
+		if [[ -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
+			echo "Oops! The domain you specifiy ${domain} is already taken in our digital universe. Let's try again!"
+			echo ""
+		else
+			break
+		fi 
+	done
+}
+
+create_generate_certificate() {
+
+# Initialize subdomain and domainName variables
+subdomain=""
+domainName="${domain}"
+
+# Check if it's a subdomain (contains at least one dot)
+if [[ "${domain}" == *.* ]]; then
+  # Use regex to split the domain name
+  if [[ "${domain}" =~ ^([^\.]+)\.(.+\..+)$ ]]; then
+    subdomain="${BASH_REMATCH[1]}"
+    domainName="${BASH_REMATCH[2]}"
+  fi
+fi
+
+# If subdomain is empty, it means it's a top-level domain; use fullDomain as domainName
+if [ -z "$subdomain" ]; then
+  domainName="${domain}"
+fi
+
+# Set the certificate file paths
+cert_path="/etc/letsencrypt/live/${domainName}/fullchain.pem"
+privkey_path="/etc/letsencrypt/live/${domainName}/privkey.pem"
+
+# Check if the certificate files exist
+if [ -f "$cert_path" ] && [ -f "$privkey_path" ]; then
+    # Check the validity of the certificate
+    if openssl x509 -checkend 0 -noout -in "$cert_path" > /dev/null 2>&1; then
+        echo "Certificate is still valid. No renewal needed."
+    else
+        echo "Certificate has expired or is invalid. Proceeding with renewal..."
+        certbot certonly --noninteractive --agree-tos --register-unsafely-without-email \
+            --dns-cloudflare --dns-cloudflare-credentials "/root/.cloudflare/token" \
+            --dns-cloudflare-propagation-seconds 20 -d "${domainName}" -d "*.${domainName}"
+    fi
+else
+    echo "No valid certificate found for the domain. Generating a new certificate..."
+    certbot certonly --noninteractive --agree-tos --register-unsafely-without-email \
+        --dns-cloudflare --dns-cloudflare-credentials "/root/.cloudflare/token" \
+        --dns-cloudflare-propagation-seconds 20 -d "${domainName}" -d "*.${domainName}"
+fi
+}
+
+create_install_certificate() {
+
+# Initialize subdomain and domainName variables
+subdomain=""
+domainName="${domain}"
+
+# Check if it's a subdomain (contains at least one dot)
+if [[ "${domain}" == *.* ]]; then
+  # Use regex to split the domain name
+  if [[ "${domain}" =~ ^([^\.]+)\.(.+\..+)$ ]]; then
+    subdomain="${BASH_REMATCH[1]}"
+    domainName="${BASH_REMATCH[2]}"
+  fi
+fi
+
+# If subdomain is empty, it means it's a top-level domain; use fullDomain as domainName
+if [ -z "$subdomain" ]; then
+  domainName="${domain}"
+fi
+
+# Determine the paths to the certificate files
+certDirectory="/etc/letsencrypt/live/${domainName}"
+
+# Check if the certificate directory exists
+if [ ! -d "$certDirectory" ]; then
+  echo "Certificate directory not found for domain: ${domain}"
+  exit 1
+fi
+
+# Construct the paths to the certificate files based on the domain name
+privateKey="$certDirectory/privkey.pem"
+certificate="$certDirectory/cert.pem"
+
+# Check if the certificate files exist
+if [ ! -f "$privateKey" ] || [ ! -f "$certificate" ]; then
+  echo "Certificate files not found for domain: ${domain}"
+  exit 1
+fi
+
+# Run the clpctl command with the determined domainName and certificate paths
+clpctl site:install:certificate --domainName="${domain}" --privateKey="$privateKey" --certificate="$certificate"
+}
+
+create_static_site() {
+        read -p "Enter domain: " domain
+        read -p "Enter username: " username
+
+        clpctl site:add:static --domainName="${domain}" --siteUser="${username}" --siteUserPassword='!secretPassword!'
+	sleep 3
+}
+
+create_classicpress_site() {
+	clear
+	echo "Please fill in the basic information."
+	echo ""
+	create_site_username
+	create_site_password
+	create_site_domain
 
 	if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
-        	read -p "Template: " template
-        	read -p "Site User: " user
-
-        	# Generate a random password
-        	password=$(openssl rand -base64 15)
-
-		clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
-
-		if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
-			rm -rf  "/home/${user}/htdocs/${domain}/index.php"
-		fi
-		dbpass=$(openssl rand -base64 15)
-		clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
-
-		if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
-                        read -p "Username: " username
-                        read -p "Password: " password
-                        read -p "Email: " email
-			su - "${user}" -c "wp core download --path=/home/${user}/htdocs/${domain}"
-			su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
-			su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=${username} --admin_password=${password} --admin_email=${email} --skip-email --path=/home/${user}/htdocs/${domain}"
-		fi
-	else
-		echo -e "${yellow}${domain} exists...skipping${nc}"
+		clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="WordPress" --siteUser="${site_username}" --siteUserPassword="${site_password}"
 	fi
-elif [[ "$1" == "site:add:classicpress"  ]]; then
-        read -p "Enter Domain: " domain
 
-        if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
-                read -p "Template: " template
-                read -p "Site User: " user
+	if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
+		rm -rf  "/home/${user}/htdocs/${domain}/index.php"
+	fi
 
-                # Generate a random password
-                password=$(openssl rand -base64 15)
+	dbpass=$(openssl rand -base64 15)
+	clpctl db:add --domainName="${domain}" --databaseName="${site_username}" --databaseUserName="${site_username}" --databaseUserPassword="${dbpass}"
 
-                clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
+	if [[ ! -f "/home/${site_username}/htdocs/${domain}/wp-config.php" ]]; then
+		read -p "Username: " cp_username
+		read -p "Password: " cp_password
+		read -p "Email: " cp_email
 
-                if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
-                        rm -rf  "/home/${user}/htdocs/${domain}/index.php"
-                fi
-                dbpass=$(openssl rand -base64 15)
-                clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
+		su - "${site_username}" -c "wp core download https://www.classicpress.net/latest.zip --path=/home/${site_username}/htdocs/${domain}"
+		su - "${site_username}" -c "wp config create --dbhost=localhost --dbname=${site_username} --dbuser=${site_username} --dbpass=${dbpass} --path=/home/${site_username}/htdocs/${domain}"
+		su - "${site_username}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=${cp_username} --admin_password=${cp_password} --admin_email=${cp_email} --skip-email --path=/home/${site_username}/htdocs/${domain}"
+	fi
 
-                if [[ ! -f "/home/${user}/htdocs/${domain}/wp-config.php" ]]; then
-			read -p "Username: " username
-			read -p "Password: " password
-			read -p "Email: " email
-                        su - "${user}" -c "wp core download https://www.classicpress.net/latest.zip --path=/home/${user}/htdocs/${domain}"
-                        su - "${user}" -c "wp config create --dbhost=localhost --dbname=${user} --dbuser=${user} --dbpass=${dbpass} --path=/home/${user}/htdocs/${domain}"
-                        su - "${user}" -c "wp core install  --url=https://${domain} --title=${domain} --admin_user=${username} --admin_password=${password} --admin_email=${email} --skip-email --path=/home/${user}/htdocs/${domain}"
-                fi
-        else
-                echo -e "${yellow}${domain} exists...skipping${nc}"
-        fi
-fi
+	create_generate_certificate
+	create_install_certificate
+	sleep 5
+}
 
-if [[ "$1" == "site:import:wordpress" ]]; then
-	echo  "Importing Site"
-elif [[ "$1" == "site:import:classicpress" ]]; then
-       read -p "Enter Domain: " domain
+create_site() {
+    while true; do
+	clear
+        echo "Choose the type of site to create:"
+	echo ""
+	echo "1) ClassicPress"
+	echo "2) Jigsaw"
+	echo "3) Laravel"
+	echo "4) ReactJS"
+	echo "5) Static"
+	echo "6) WordPress"
+        echo "7) Exit to main menu"
 
-        if [[ ! -f "/etc/nginx/sites-enabled/${domain}.conf" ]]; then
-                read -p "Template: " template
-                read -p "Site User: " user
+        read -p "Enter your choice (1-7): " site_choice
 
-                # Generate a random password
-                password=$(openssl rand -base64 15)
+        case $site_choice in
+		1) create_classicpress_site
+		   break
+		   ;;
+            	2) create_jigsaw_site;;
+            3) create_laravel_site;;
+            4) create_reactjs_site;;
+	    5) create_static_site
+               break
+	       ;;
+            6) create_wordpress_site;;
+            7) return;;
+            *) echo "Invalid option. Please enter a number between 1-5.";;
+        esac
+    done
+}
 
-                clpctl site:add:php --domainName="${domain}" --phpVersion="8.0" --vhostTemplate="${template}" --siteUser="${user}" --siteUserPassword="${password}"
+while true; do
+    clear
+    echo "Main Menu"
+    echo ""
+    echo "1. Create or Delete a site."
+    echo "2) List files in current directory"
+    echo "3) Display the current working directory"
+    echo "4) Exit"
+    echo ""
+    read -p "Enter your choice (1-4): " choice
 
-                if [[ -f "/home/${user}/htdocs/${domain}/index.php" ]]; then
-                        rm -rf  "/home/${user}/htdocs/${domain}/index.php"
-                fi
-
-		if [[ "${domain}" == "luthemes.com"  ]]; then
-#			ssh root@108.166.183.180 bash test.sh
-
-                        su - "${user}" -c "wget -q -O /home/${user}/backup.tar  https://dev.luthemes.com/aesculapius/backup.tar"
-       	                su - "${user}" -c "tar -xvf /home/${user}/backup.tar > /dev/null 2>&1"
-               	        su - "${user}" -c "rm -rf htdocs"
-                       	su - "${user}" -c "mv home/${user}/htdocs /home/${user}"
-		fi
-
-
-		dbpass=$(su - "${user}" -c "wp config get DB_PASSWORD --path=/home/luthemes/htdocs/luthemes.com")
-
-		clpctl db:add --domainName="${domain}" --databaseName="${user}" --databaseUserName="${user}" --databaseUserPassword="${dbpass}"
-
-		dbpath="/home/${user}/home/${user}/backups/databases/${user}"
-
-		date=$(ls -1 "${dbpath}" | sort -r | head -n 1)
-
-		sql=$(ls -1t "${dbpath}/${date}"/*.sql.gz | head -n 1)
-
-		clpctl db:import --databaseName="${user}" --file="${sql}"
-
-		rm -rf "/home/${user}/backup.tar"
-		rm -rf "/home/${user}/home"
-
-#		ssh root@108.166.183.180 bash delete.sh
-
-		clpctl site:install:certificate --domainName="${domain}" --privateKey="/etc/letsencrypt/live/${domain}/privkey.pem" --certificate="/etc/letsencrypt/live/${domain}/cert.pem"
-        else
-                echo -e "${yellow}${domain} exists...skipping${nc}"
-        fi
-fi
-
+    case $choice in
+        1) create_site;;
+        2) ls;;
+        3) pwd;;
+        4) exit;;
+        *) echo "Invalid option. Please enter a number between 1-4.";;
+    esac
+done
